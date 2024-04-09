@@ -1,0 +1,11 @@
+<!-- FILEPATH: /home/drakemoore/gnss/src/gps_driver/launch/standalone_driver.launch -->
+
+<launch>
+    <!-- Define the port parameter -->
+    <arg name="port" default="/dev/ttyUSB0" />
+
+    <!-- Launch the standalone_driver.py node -->
+    <node name="standalone_driver" pkg="gps_driver" type="standalone_driver.py">
+        <param name="port" value="$(arg port)" />
+    </node>
+</launch>
