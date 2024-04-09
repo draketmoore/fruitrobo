@@ -1,0 +1,11 @@
+<!-- FILEPATH: /home/drakemoore/gnss/src/gps_driver/launch/rtk_driver.launch -->
+
+<launch>
+    <!-- Define the port parameter -->
+    <arg name="port" default="/dev/ttyUSB0" />
+
+    <!-- Launch the rtk_driver.py node -->
+    <node name="rtk_driver" pkg="gps_driver" type="rtk_driver.py">
+        <param name="port" value="$(arg port)" />
+    </node>
+</launch>
