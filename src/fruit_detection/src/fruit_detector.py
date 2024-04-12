@@ -4,6 +4,8 @@ from copy import deepcopy
 import rospy
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
+from roboflow import Roboflow
+import supervision as sv
 
 class FruitRipenessDetector:
     def __init__(self):
@@ -11,12 +13,47 @@ class FruitRipenessDetector:
         self.kernelClose = np.ones((20, 20), np.uint8)
 
         # Define HSV color ranges for different ripeness levels
-        self.lower_green = np.array([35, 100, 50])
-        self.upper_green = np.array([85, 255, 255])
+        self.lower_green = np.array([40, 50, 50])
+        self.upper_green = np.array([80, 255, 255])
         self.lower_yellow = np.array([20, 100, 100])
-        self.upper_yellow = np.array([30, 255, 255])
+        self.upper_yellow = np.array([40, 255, 255])
         self.lower_red = np.array([0, 100, 100])
         self.upper_red = np.array([10, 255, 255])
+        # self.display_threshold_colors()
+
+
+        rf = Roboflow(api_key="1J1vsxLnwdelvzUNnDM9")
+        project = rf.workspace().project("yolov8-firsttry")
+        self.model = project.version(6).model
+
+    def display_threshold_colors(self):
+        # Create blank images for each color threshold
+        red_threshold = np.zeros((100, 100, 3), np.uint8)
+        green_threshold = np.zeros((100, 100, 3), np.uint8)
+        yellow_threshold = np.zeros((100, 100, 3), np.uint8)
+
+
+        # Fill the images with the respective color thresholds
+        red_threshold[:, :] = self.lower_red  # Set red channel to maximum
+        green_threshold[:, :] = self.lower_green  # Set green channel to maximum
+        yellow_threshold[:, :] = self.lower_yellow  # Set green and blue channels to maximum
+
+        # Display the threshold images
+        cv2.imshow("Red Threshold", red_threshold)
+        cv2.imshow("Green Threshold", green_threshold)
+        cv2.imshow("Yellow Threshold", yellow_threshold)
+        cv2.waitKey(0)
+
+        # Fill the images with the respective color thresholds
+        red_threshold[:, :] = self.upper_red  # Set red channel to maximum
+        green_threshold[:, :] = self.upper_green  # Set green channel to maximum
+        yellow_threshold[:, :] = self.upper_yellow  # Set green and blue channels to maximum
+
+        # Display the threshold images
+        cv2.imshow("Red Threshold", red_threshold)
+        cv2.imshow("Green Threshold", green_threshold)
+        cv2.imshow("Yellow Threshold", yellow_threshold)
+        cv2.waitKey(0)
         
 
     def preprocess_image(self, image):
@@ -47,55 +84,84 @@ class FruitRipenessDetector:
     def determine_ripeness(self, red_percentage, yellow_percentage, green_percentage):
         if green_percentage > 0.5:
             return "Low Ripeness"
-        elif yellow_percentage > 0.8:
+        elif red_percentage > 0.8:
             return "High Ripeness"
         else:
             return "Medium Ripeness"
 
     def process_image(self, image):
-        hsv_image = self.preprocess_image(image)
-        contours = self.find_contours(hsv_image)
-        
-        # Sort contours by area in descending order and remove small contours
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)
-        if contours:
-            # Focus on the largest contour
-            largest_contour = contours[0]
-            x, y, w, h = cv2.boundingRect(largest_contour)
-            crop_img = hsv_image[y:y+h, x:x+w]
-        
-            # Apply color masks for red, green, and yellow segments within the fruit
-            red_mask = self.apply_color_mask(crop_img, self.lower_red, self.upper_red) + \
-                   self.apply_color_mask(crop_img, np.array([170, 50, 50]), np.array([180, 255, 255]))
-            green_mask = self.apply_color_mask(crop_img, self.lower_green, self.upper_green)
-            yellow_mask = self.apply_color_mask(crop_img, self.lower_yellow, self.upper_yellow)
-        
-            # Calculate the percentage of each color present in the fruit
-            red_percentage = self.calculate_color_percentages(red_mask, crop_img)
-            green_percentage = self.calculate_color_percentages(green_mask, crop_img)
-            yellow_percentage = self.calculate_color_percentages(yellow_mask, crop_img)
-        
+        # Create kernels for morphological operations
+        kernelOpen = np.ones((5, 5), np.uint8)
+        kernelClose = np.ones((20, 20), np.uint8)
 
-            ripeness = self.determine_ripeness(red_percentage, yellow_percentage, green_percentage)
-        
-            # Draw a rectangle around the fruit and label it with the ripeness level
-            cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            cv2.putText(image, ripeness, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
-    
-        return image
+        # Convert BGR to HSV
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        # Define color ranges and create masks
+        masks = {
+            'red1': cv2.inRange(hsv, np.array([0, 50, 50]), np.array([10, 255, 255])),
+            'red2': cv2.inRange(hsv, np.array([170, 50, 50]), np.array([180, 255, 255])),
+            'green': cv2.inRange(hsv, np.array([50, 50, 50]), np.array([70, 255, 255])),
+            'yellow': cv2.inRange(hsv, np.array([20, 50, 50]), np.array([30, 255, 255]))
+        }
+
+        masks['red'] = masks['red1'] + masks['red2']
+        maskOpen = cv2.morphologyEx(masks['red'], cv2.MORPH_OPEN, kernelOpen)
+        maskFinal = cv2.morphologyEx(maskOpen, cv2.MORPH_CLOSE, kernelClose)
+
+        # Calculate color percentages
+        total_pixels = hsv.size / 3  # Number of pixels per channel
+        color_counts = {color: np.sum(mask == 255) for color, mask in masks.items()}
+        color_percents = {color: count / total_pixels for color, count in color_counts.items()}
+        print(color_percents)
+        # Determine ripeness based on color proportions
+        ripeness = "Medium Ripeness"
+        if color_percents['green'] > 0.5:
+            ripeness = "Low Ripeness"
+        elif color_percents['yellow'] > 0.8:
+            ripeness = "High Ripeness"
+
+        print("Ripeness:", ripeness)
+        for color, mask in masks.items():
+            cv2.imshow(f'{color.capitalize()} Mask', mask)
+
+        return mask
     
     def detect(self, image):
         p_image = self.process_image(image)
         cv2.imshow("Ripeness Detection", p_image)
         cv2.waitKey(0)
 
+
+    def yolo_detect(self, image):
+        
+        cv2.imwrite("temp.jpg", image)
+
+        result = self.model.predict('/home/drakemoore/fruitrobo/temp.jpg', confidence=40).json()
+
+        labels = [item["class"] for item in result["predictions"]]
+
+        detections = sv.Detections.from_roboflow(result)
+
+        label_annotator = sv.LabelAnnotator()
+        mask_annotator = sv.MaskAnnotator()
+
+        image = cv2.imread("temp.jpg")
+
+        annotated_image = mask_annotator.annotate(
+            scene=image, detections=detections)
+        annotated_image = label_annotator.annotate(
+            scene=annotated_image, detections=detections, labels=labels)
+
+        sv.plot_image(image=annotated_image, size=(16, 16))
+
     def run(self):
         while not rospy.is_shutdown():
             # cv2.waitKey(0)
-
             image = rospy.wait_for_message('/camera/color/image_raw', Image)
             cv_image = CvBridge().imgmsg_to_cv2(image, "bgr8")
-            self.detect(cv_image)
+            # self.detect(cv_image)
+            self.yolo_detect(cv_image)
 
 
 
