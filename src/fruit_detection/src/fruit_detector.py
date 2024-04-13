@@ -6,6 +6,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from roboflow import Roboflow
 import supervision as sv
+import pandas as pd
 
 class FruitRipenessDetector:
     def __init__(self):
@@ -21,10 +22,12 @@ class FruitRipenessDetector:
         self.upper_red = np.array([10, 255, 255])
         # self.display_threshold_colors()
 
+        
+        self.fruits = pd.DataFrame(columns=["timestamp", "fruit", "ripeness"])
 
-        rf = Roboflow(api_key="1J1vsxLnwdelvzUNnDM9")
-        project = rf.workspace().project("yolov8-firsttry")
-        self.model = project.version(6).model
+        # rf = Roboflow(api_key="1J1vsxLnwdelvzUNnDM9")
+        # project = rf.workspace().project("yolov8-firsttry")
+        # self.model = project.version(6).model
 
     def display_threshold_colors(self):
         # Create blank images for each color threshold
@@ -94,6 +97,7 @@ class FruitRipenessDetector:
         kernelOpen = np.ones((5, 5), np.uint8)
         kernelClose = np.ones((20, 20), np.uint8)
 
+
         # Convert BGR to HSV
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
@@ -101,34 +105,54 @@ class FruitRipenessDetector:
         masks = {
             'red1': cv2.inRange(hsv, np.array([0, 50, 50]), np.array([10, 255, 255])),
             'red2': cv2.inRange(hsv, np.array([170, 50, 50]), np.array([180, 255, 255])),
-            'green': cv2.inRange(hsv, np.array([50, 50, 50]), np.array([70, 255, 255])),
+            'green': cv2.inRange(hsv, np.array([40, 40, 40]), np.array([70, 255, 255])),
             'yellow': cv2.inRange(hsv, np.array([20, 50, 50]), np.array([30, 255, 255]))
         }
-
         masks['red'] = masks['red1'] + masks['red2']
-        maskOpen = cv2.morphologyEx(masks['red'], cv2.MORPH_OPEN, kernelOpen)
-        maskFinal = cv2.morphologyEx(maskOpen, cv2.MORPH_CLOSE, kernelClose)
 
         # Calculate color percentages
         total_pixels = hsv.size / 3  # Number of pixels per channel
         color_counts = {color: np.sum(mask == 255) for color, mask in masks.items()}
-        color_percents = {color: count / total_pixels for color, count in color_counts.items()}
-        print(color_percents)
-        # Determine ripeness based on color proportions
-        ripeness = "Medium Ripeness"
-        if color_percents['green'] > 0.5:
+        color_percents = {color: count / total_pixels * 100 for color, count in color_counts.items()}
+
+        # Determine ripeness based on dominant color proportion
+        ripeness = "Unknown"
+
+        # Find the dominant color by finding the maximum percentage
+        dominant_color = max(color_percents, key=color_percents.get)
+
+        if dominant_color == 'green':
             ripeness = "Low Ripeness"
-        elif color_percents['yellow'] > 0.8:
+        elif dominant_color == 'yellow':
+            ripeness = "Medium Ripeness"
+        elif dominant_color == 'red':
             ripeness = "High Ripeness"
 
-        print("Ripeness:", ripeness)
-        for color, mask in masks.items():
-            cv2.imshow(f'{color.capitalize()} Mask', mask)
+        # Print color percentages and ripeness in the console
+        print(f"Ripeness: {ripeness}")
+        print(f"Red: {color_percents['red']:.2f}%")
+        print(f"Green: {color_percents['green']:.2f}%")
+        print(f"Yellow: {color_percents['yellow']:.2f}%")
 
-        return mask
+        # Find the largest contour in the combined mask
+        total_mask = sum(masks.values())
+        contours, _ = cv2.findContours(total_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            x, y, w, h = cv2.boundingRect(largest_contour)
+            cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cv2.putText(image, ripeness, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
+
+
+        return image, ripeness
     
     def detect(self, image):
-        p_image = self.process_image(image)
+        p_image, ripeness = self.process_image(image)
+
+        timestamp = rospy.Time.now()
+        self.fruits = pd.concat([self.fruits, pd.DataFrame([[timestamp, "apple", ripeness]], columns=["timestamp", "fruit", "ripeness"])])
+        self.fruits.to_csv("fruits.csv", index=False)
+
         cv2.imshow("Ripeness Detection", p_image)
         cv2.waitKey(0)
 
@@ -160,8 +184,8 @@ class FruitRipenessDetector:
             # cv2.waitKey(0)
             image = rospy.wait_for_message('/camera/color/image_raw', Image)
             cv_image = CvBridge().imgmsg_to_cv2(image, "bgr8")
-            # self.detect(cv_image)
-            self.yolo_detect(cv_image)
+            self.detect(cv_image)
+            # self.yolo_detect(cv_image)
 
 
 

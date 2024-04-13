@@ -23,13 +23,13 @@ class RTKDriver():
 
         self.rate = rospy.Rate(10)
 
-        self.port = rospy.get_param('~port', '/dev/pts/7')
+        self.port = rospy.get_param('~port', '/dev/ttyUSB0')
         rospy.loginfo(self.port)
         self.rtk_pub = rospy.Publisher('rtk', Customrtk, queue_size=1)
         self.serial_port = serial.Serial(self.port, baudrate=4800)
         rospy.loginfo("Connected to port " + self.port)
         self.rtk_msg = Customrtk()
-        self.bag = rosbag.Bag('occluded_rtk.bag', 'w')
+        self.bag = rosbag.Bag('fruit_gps.bag', 'w')
 
     def parseGNGGA(self, line):
         g = line.split(',')
