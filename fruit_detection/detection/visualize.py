@@ -179,23 +179,35 @@ def draw_box(im, np_boxes, labels, threshold=0.5):
         
         # get the image in the bbox
         im_bbox = im.crop((xmin, ymin, xmax, ymax))
+
         
         # Convert PIL image to OpenCV format
         segment = cv2.cvtColor(np.array(im_bbox), cv2.COLOR_RGB2BGR)
-        
-        sam = sam_model_registry["vit_b"](checkpoint="/Users/harry/spring 2024/segment-anything/sam_vit_b_01ec64.pth")
+        print("Showing segment")
+        print(segment.shape)
+        # cv2.imshow("Segment", np.array(im_bbox))
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        print("Loading SAM model")
+        sam = sam_model_registry["vit_b"](checkpoint="/home/drakemoore/Downloads/sam_vit_b_01ec64.pth")
+        sam.to("cuda")
+        print("Creating mask generator")
         mask_generator = SamAutomaticMaskGenerator(sam)
+        print("Generating mask")
         masks = mask_generator.generate(segment)
-        
+        print("Generated Mask")
         # show the mask
-        mask = masks[0]
-        mask = cv2.resize(mask, (segment.shape[1], segment.shape[0]))
-        mask = np.where(mask > 0.5, 255, 0).astype(np.uint8)
-        mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-        mask = cv2.addWeighted(segment, 0.5, mask, 0.5, 0)
-        cv2.imshow("mask", mask)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        print(masks)
+
+        for m in masks:
+            mask = m['segmentation'].astype(np.uint8)
+            mask = cv2.resize(mask, (segment.shape[1], segment.shape[0]))
+            mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+            mask = cv2.applyColorMap(mask, cv2.COLORMAP_JET)
+            cv2.imshow("Mask", mask)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
         
         # Extract the segment and determine ripeness
         segment_hsv = cv2.cvtColor(segment, cv2.COLOR_BGR2HSV)
