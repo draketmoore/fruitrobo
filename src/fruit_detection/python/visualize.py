@@ -89,27 +89,28 @@ def determine_ripeness(hsv):
     yellow_percentage = color_percents['yellow']
 
     # Determine ripeness based on dominant color proportion
-    #dominant_color = max(color_percents, key=color_percents.get)
+    dominant_color = max(color_percents, key=color_percents.get)
+    print("Dominant color: ", dominant_color)
     
     print(f"red:{color_percents['red']}, green:{color_percents['green']}, yellow:{color_percents['yellow']}")
 
-    if red_percentage > 50 or (red_percentage > 30 and yellow_percentage > 30):
-        return "High Ripeness"
-    elif green_percentage > 50:
-        return "Low Ripeness"
-    elif yellow_percentage > 50:
+    # if red_percentage > 50 or (red_percentage > 30 and yellow_percentage > 30):
+    #     return "High Ripeness"
+    # elif green_percentage > 50:
+    #     return "Low Ripeness"
+    # elif yellow_percentage > 50:
+    #     return "Medium Ripeness"
+    # else:
+    #     return "Unknown"
+
+    if dominant_color == 'green':
+       return "Low Ripeness"
+    elif dominant_color == 'yellow':
         return "Medium Ripeness"
+    elif dominant_color == 'red':
+        return "High Ripeness"
     else:
         return "Unknown"
-
-    #if dominant_color == 'green':
-     #   return "Low Ripeness"
-    #elif dominant_color == 'yellow':
-        #return "Medium Ripeness"
-    #elif dominant_color == 'red':
-        #return "High Ripeness"
-    #else:
-        #return "Unknown"
 
 
 def draw_box(im, np_boxes, labels, threshold=0.5, imname=None):
@@ -161,7 +162,7 @@ def draw_box(im, np_boxes, labels, threshold=0.5, imname=None):
         draw.rectangle([xmin, ymin, xmax, ymax], outline=color, width=draw_thickness)
 
         # Label with class and ripeness level
-        text = "{}: {}".format(labels[clsid], ripeness_level)
+        text = "{}: {}".format(labels[clsid] + "_" + str(idx), ripeness_level)
         # font = ImageFont.truetype("Arial.ttf", 20)
         font = ImageFont.load_default()
         text_size = draw.textsize(text, font=font)

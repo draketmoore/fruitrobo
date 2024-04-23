@@ -27,5 +27,5 @@ Preprocess:
 - type: Permute
 label_list:
 - apple
-- banana
-- orange
+# - banana
+# - orange
