@@ -71,12 +71,22 @@ def get_color_map_list(num_classes):
 
 def determine_ripeness(hsv):
     # Define color ranges for masks
+    # masks = {
+    #     'red1': cv2.inRange(hsv, np.array([0, 0, 0]), np.array([10, 255, 255])),
+    #     'red2': cv2.inRange(hsv, np.array([170, 0, 0]), np.array([180, 255, 255])),
+    #     'green': cv2.inRange(hsv, np.array([36, 0, 0]), np.array([86, 255, 255])),
+    #     'yellow': cv2.inRange(hsv, np.array([20, 0, 0]), np.array([30, 255, 255]))
+    # }
+
     masks = {
-        'red1': cv2.inRange(hsv, np.array([0, 0, 0]), np.array([10, 255, 255])),
-        'red2': cv2.inRange(hsv, np.array([170, 0, 0]), np.array([180, 255, 255])),
-        'green': cv2.inRange(hsv, np.array([36, 0, 0]), np.array([86, 255, 255])),
-        'yellow': cv2.inRange(hsv, np.array([20, 0, 0]), np.array([30, 255, 255]))
+        'red1': cv2.inRange(hsv, np.array([0, 120, 70]), np.array([10, 255, 255])),
+        'red2': cv2.inRange(hsv, np.array([170, 120, 70]), np.array([180, 255, 255])),
+        'yellow': cv2.inRange(hsv, np.array([25, 50, 70]), np.array([60, 255, 255])),
+        'green': cv2.inRange(hsv, np.array([36, 50, 70]), np.array([89, 255, 255]))
+
     }
+
+
     masks['red'] = masks['red1'] + masks['red2']
 
     # Calculate color percentages
@@ -92,7 +102,8 @@ def determine_ripeness(hsv):
     dominant_color = max(color_percents, key=color_percents.get)
     print("Dominant color: ", dominant_color)
     
-    print(f"red:{color_percents['red']}, green:{color_percents['green']}, yellow:{color_percents['yellow']}")
+    # print(f"red:{color_percents['red']}, green:{color_percents['green']}, yellow:{color_percents['yellow']}")
+    print(color_percents)
 
     # if red_percentage > 50 or (red_percentage > 30 and yellow_percentage > 30):
     #     return "High Ripeness"
@@ -106,13 +117,13 @@ def determine_ripeness(hsv):
     if dominant_color == 'green':
        return "Low Ripeness"
     elif dominant_color == 'yellow':
-        return "Medium Ripeness"
-    elif dominant_color == 'red':
+        return "Low Ripeness"
+    elif dominant_color in ['red', 'red1', 'red2']:
         return "High Ripeness"
     else:
         return "Unknown"
 
-
+fruit_filename = 'fruit_data6.csv'
 def draw_box(im, np_boxes, labels, threshold=0.5, imname=None):
     draw_thickness = min(im.size) // 320
     draw = ImageDraw.Draw(im)
@@ -129,7 +140,7 @@ def draw_box(im, np_boxes, labels, threshold=0.5, imname=None):
     mask_generator = SamAutomaticMaskGenerator(sam)
     print("Mask generated")
 
-    fruit_df = pd.read_csv("fruit_data.csv")
+    fruit_df = pd.read_csv(fruit_filename)
 
     for idx, dt in enumerate(np_boxes):
         clsid, bbox, score = int(dt[0]), dt[2:], dt[1]
@@ -137,7 +148,10 @@ def draw_box(im, np_boxes, labels, threshold=0.5, imname=None):
 
         # Extract the image within the bounding box
         im_bbox = im.crop((xmin, ymin, xmax, ymax))
+        cv2.imwrite('test_box_'+str(idx)+'.jpg', np.array(im_bbox))
+
         segment = cv2.cvtColor(np.array(im_bbox), cv2.COLOR_RGB2BGR)
+        cv2.imwrite("test_segment_"+str(idx)+".jpg", segment)
 
         # Generate masks for the current segment
         masks = mask_generator.generate(segment)
@@ -145,24 +159,27 @@ def draw_box(im, np_boxes, labels, threshold=0.5, imname=None):
         # Find the largest mask by area
         largest_mask_info = max(masks, key=lambda x: x['area'])
         largest_mask = largest_mask_info['segmentation'].astype('uint8')
-        print(largest_mask)
-        print(largest_mask.shape)
+        # print(largest_mask)
+        # print(largest_mask.shape)
+        # print("Masks: ", masks)
         
         # Apply the mask to the segment to get the color image of the largest segment
         segment_color = cv2.bitwise_and(segment, segment, mask=largest_mask)
 
         # Convert the largest mask to HSV and determine ripeness
         segment_hsv = cv2.cvtColor(segment_color, cv2.COLOR_BGR2HSV)
+        # segment_hsv = cv2.cvtColor(segment, cv2.COLOR_RGB2HSV)
         ripeness_level = determine_ripeness(segment_hsv)
 
         # Visualize and annotate the image
-        color = tuple(clsid2color.get(clsid, color_list[clsid]))
+        # color = tuple(clsid2color.get(clsid, color_list[clsid]))
+        color='black'
 
         # Draw bounding box
         draw.rectangle([xmin, ymin, xmax, ymax], outline=color, width=draw_thickness)
 
         # Label with class and ripeness level
-        text = "{}: {}".format(labels[clsid] + "_" + str(idx), ripeness_level)
+        text = "{}: {}".format("apple_" + str(idx), ripeness_level)
         # font = ImageFont.truetype("Arial.ttf", 20)
         font = ImageFont.load_default()
         text_size = draw.textsize(text, font=font)
@@ -173,8 +190,8 @@ def draw_box(im, np_boxes, labels, threshold=0.5, imname=None):
         print("Imname: ", imname)
         timestamp = imname.split(".")[0]
         print("Timestamp: " , timestamp)
-        fruit_df.loc[len(fruit_df.index)] = [timestamp + '_' + str(idx), ripeness_level, 0, xmin, ymin, xmax, ymax]
-        fruit_df.to_csv("fruit_data.csv", index=False)
+        fruit_df.loc[len(fruit_df.index)] = [timestamp + '_' + str(idx), ripeness_level, 0, 0, xmin, ymin, xmax, ymax]
+        fruit_df.to_csv(fruit_filename, index=False)
 
 
 
